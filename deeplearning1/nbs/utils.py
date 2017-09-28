@@ -64,14 +64,17 @@ from vgg16bn import *
 np.set_printoptions(precision=4, linewidth=100)
 
 
-to_bw = np.array([0.299, 0.587, 0.114])
+to_bw = np.array([0.299, 0.587, 0.114]) # has shape of (3,)
 
+# rollaxis moves axis, but I don't understand why it is done
+# in order for .dot(to_bw) to work, the last axis must be 3
 def gray(img):
-    if K.image_dim_ordering() == 'tf':
-        return np.rollaxis(img, 0, 1).dot(to_bw)
-    else:
-        return np.rollaxis(img, 0, 3).dot(to_bw)
+    if K.image_dim_ordering() == 'tf': # channels last
+        return np.rollaxis(img, 0, 1).dot(to_bw) # puts 0th axis in 1st position [why?]
+    else: # theano - channels first
+        return np.rollaxis(img, 0, 3).dot(to_bw) # puts 0th axis in 3rd position [seems correct]
 
+# converts to unsigned integer (0-255)
 def to_plot(img):
     if K.image_dim_ordering() == 'tf':
         return np.rollaxis(img, 0, 1).astype(np.uint8)
@@ -81,16 +84,18 @@ def to_plot(img):
 def plot(img):
     plt.imshow(to_plot(img))
 
-
+# shortcut routines
 def floor(x):
     return int(math.floor(x))
 def ceil(x):
     return int(math.ceil(x))
 
+
 def plots(ims, figsize=(12,6), rows=1, interp=False, titles=None):
     if type(ims[0]) is np.ndarray:
         ims = np.array(ims).astype(np.uint8)
         if (ims.shape[-1] != 3):
+            # make 1st axis the last one, same as np.rollaxis(ims, 1, 4)
             ims = ims.transpose((0,2,3,1))
     f = plt.figure(figsize=figsize)
     for i in range(len(ims)):
@@ -100,10 +105,11 @@ def plots(ims, figsize=(12,6), rows=1, interp=False, titles=None):
             sp.set_title(titles[i], fontsize=16)
         plt.imshow(ims[i], interpolation=None if interp else 'none')
 
-
+# mx is maximum
 def do_clip(arr, mx):
-    clipped = np.clip(arr, (1-mx)/1, mx)
-    return clipped/clipped.sum(axis=1)[:, np.newaxis]
+    clipped = np.clip(arr, (1-mx)/1, mx) # why divide by 1?
+    # renormalize all values, so that sum is 1
+    return clipped/clipped.sum(axis=1)[:, np.newaxis] # inserts additional axis at end
 
 
 def get_batches(dirname, gen=image.ImageDataGenerator(), shuffle=True, batch_size=4, class_mode='categorical',
