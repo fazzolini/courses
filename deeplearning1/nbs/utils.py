@@ -111,7 +111,7 @@ def do_clip(arr, mx):
     # renormalize all values, so that sum is 1
     return clipped/clipped.sum(axis=1)[:, np.newaxis] # inserts additional axis at end
 
-
+# been here, done that
 def get_batches(dirname, gen=image.ImageDataGenerator(), shuffle=True, batch_size=4, class_mode='categorical',
                 target_size=(224,224)):
     return gen.flow_from_directory(dirname, target_size=target_size,
@@ -119,19 +119,30 @@ def get_batches(dirname, gen=image.ImageDataGenerator(), shuffle=True, batch_siz
 
 
 def onehot(x):
-    return to_categorical(x)
+    return to_categorical(x) # keras.utils.np_utils.to_categorical
 
 
 def wrap_config(layer):
     return {'class_name': layer.__class__.__name__, 'config': layer.get_config()}
 
 
+
+'''
+This creates a new layer from layer config.
+as per https://keras.io/layers/about-keras-layers/
+https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/contrib/keras/python/keras/metrics.py
+https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/contrib/keras/python/keras/utils/generic_utils.py
+
+Deserialization = restoring an object from a serial
+representation and ensuring the invariants of the object.
+Deserialization can be thought of a separate constructor for the object. 
+'''
 def copy_layer(layer): return deserialize(wrap_config(layer))  # Keras2
 
 
 def copy_layers(layers): return [copy_layer(layer) for layer in layers]
 
-
+# nice!
 def copy_weights(from_layers, to_layers):
     for from_layer,to_layer in zip(from_layers, to_layers):
         to_layer.set_weights(from_layer.get_weights())
