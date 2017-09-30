@@ -121,7 +121,8 @@ def get_batches(dirname, gen=image.ImageDataGenerator(), shuffle=True, batch_siz
 def onehot(x):
     return to_categorical(x) # keras.utils.np_utils.to_categorical
 
-
+# layer.__class__.__name__ is a string
+# layer.get_config() is a dict
 def wrap_config(layer):
     return {'class_name': layer.__class__.__name__, 'config': layer.get_config()}
 
@@ -148,29 +149,34 @@ def copy_weights(from_layers, to_layers):
         to_layer.set_weights(from_layer.get_weights())
 
 
-def copy_model(m):
-    res = Sequential(copy_layers(m.layers))
-    copy_weights(m.layers, res.layers)
-    return res
+def copy_model(in_model):
+    # will break is model is not Sequential
+    layers_list = copy_layers(in_model.layers)
+    out_model = Sequential(layers_list)
+    copy_weights(in_model.layers, out_model.layers)
+    return out_model
 
-
-def insert_layer(model, new_layer, index):
-    res = Sequential()
-    for i,layer in enumerate(model.layers):
-        if i==index: res.add(new_layer)
-        copied = deserialize(wrap_config(layer))  # Keras2
-        res.add(copied)
+# adds new layer AT the index (starts at 0 of course)
+# note that layers are passed by reference
+def insert_layer(in_model, new_layer, index):
+    out_model = Sequential()
+    for i,layer in enumerate(in_model.layers):
+        if i==index: out_model.add(new_layer)
+        copied = copy_layer(layer)  # Keras2
+        out_model.add(copied)
         copied.set_weights(layer.get_weights())
-    return res
+    return out_model
 
-
+# ??? some kind of update of weights
 def adjust_dropout(weights, prev_p, new_p):
     scal = (1-prev_p)/(1-new_p)
     return [o*scal for o in weights]
 
 
 def get_data(path, target_size=(224,224)):
+    # get_batches returns gen.flow_from_directory whichis a generator
     batches = get_batches(path, shuffle=False, batch_size=1, class_mode=None, target_size=target_size)
+    # iterate through all samples in flow_from_directory generator and concat in numpy array
     return np.concatenate([batches.next() for i in range(batches.samples)])  # Keras2
 
 
@@ -199,16 +205,16 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix'
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
 
-
+# save numpy array to disk
 def save_array(fname, arr):
     c=bcolz.carray(arr, rootdir=fname, mode='w')
     c.flush()
 
-
+# load numpy array from disk
 def load_array(fname):
     return bcolz.open(fname)[:]
 
-
+# ?!?!?!
 def mk_size(img, r2c):
     r,c,_ = img.shape
     curr_r2c = r/c
@@ -223,7 +229,7 @@ def mk_size(img, r2c):
     arr[floor(r2):floor(r2)+r,floor(c2):floor(c2)+c] = img
     return arr
 
-
+# ?!?!?!
 def mk_square(img):
     x,y,_ = img.shape
     maxs = max(img.shape[:2])
@@ -233,13 +239,14 @@ def mk_square(img):
     arr[floor(x2):floor(x2)+x,floor(y2):floor(y2)+y] = img
     return arr
 
-
+# finetune vgg apparently
 def vgg_ft(out_dim):
     vgg = Vgg16()
     vgg.ft(out_dim)
     model = vgg.model
     return model
 
+# finetune vgg with batchnorm
 def vgg_ft_bn(out_dim):
     vgg = Vgg16BN()
     vgg.ft(out_dim)
@@ -248,31 +255,31 @@ def vgg_ft_bn(out_dim):
 
 
 def get_classes(path):
-    batches = get_batches(path+'train', shuffle=False, batch_size=1)
+    batches = get_batches(path+'train', shuffle=False, batch_size=1) # flow_from_directory
     val_batches = get_batches(path+'valid', shuffle=False, batch_size=1)
     test_batches = get_batches(path+'test', shuffle=False, batch_size=1)
     return (val_batches.classes, batches.classes, onehot(val_batches.classes), onehot(batches.classes),
         val_batches.filenames, batches.filenames, test_batches.filenames)
 
-
+# splits at where the layer_type ends
 def split_at(model, layer_type):
     layers = model.layers
-    layer_idx = [index for index,layer in enumerate(layers)
-                 if type(layer) is layer_type][-1]
+    # returns index of last layer of layer_type in the model
+    layer_idx = [index for index,layer in enumerate(layers) if type(layer) is layer_type][-1]
     return layers[:layer_idx+1], layers[layer_idx+1:]
 
-
+# used for data augmentation, mixes original with augmented data
 class MixIterator(object):
     def __init__(self, iters):
         self.iters = iters
-        self.multi = type(iters) is list
+        self.multi = type(iters) is list # iters can be also a list of iterators
         if self.multi:
             self.N = sum([it[0].N for it in self.iters])
         else:
             self.N = sum([it.N for it in self.iters])
 
     def reset(self):
-        for it in self.iters: it.reset()
+        for it in self.iters: it.reset() # reset iterator to the beginning?
 
     def __iter__(self):
         return self
